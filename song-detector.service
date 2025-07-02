@@ -1,0 +1,13 @@
+[Unit]
+Description=A daemon for recognising when music is playing and identifying it
+After=network.target
+
+[Service]
+Environment="XDG_RUNTIME_DIR=/run/user/1000"
+User=alex
+WorkingDirectory=/home/alex/src/song-detector/
+ExecStart=/home/alex/src/song-detector/.venv/bin/python monitor.py 
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

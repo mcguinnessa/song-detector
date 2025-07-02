@@ -130,7 +130,8 @@ def save_buffer_to_wav(buffer, sample_rate):
 # Print KPIs
 ###################################################################
 def print_kpis():
-   print("All Calls:" + str(kpis[ALL_AUDIO_IDX]) + " Music:" + str(kpis[ALL_AUDIO_IDX]) )
+   global kpis
+   print("All Calls:" + str(kpis[ALL_AUDIO_IDX]) + " Music:" + str(kpis[AUDIO_MUSIC_IDX]) + " Shazam Call:" + str(kpis[SHAZAM_CALLS_IDX]) + " Sz Found:" + str(kpis[SHAZAM_HITS_IDX]) )
 
 ###################################################################
 # Classifies the buffer with ML
@@ -148,9 +149,15 @@ def classify_buffer(buffer, sr):
 # Checks the volume history for loudness and stability (standard deviation)
 ###################################################################
 async def recognize_if_music():
-   kpis[ALL_AUDIO_IDX] += 1
+   global kpis
+
+
    shazam = Shazam()
    while True:
+#      print("B:KPI kpis[ALL_AUDIO_IDX]:",kpis[ALL_AUDIO_IDX])
+      kpis[ALL_AUDIO_IDX] += 1
+#      print("A:KPI kpis[ALL_AUDIO_IDX]:",kpis[ALL_AUDIO_IDX])
+
       if not volume_history:
          await asyncio.sleep(WINDOW_SECONDS)
          continue
@@ -201,8 +208,13 @@ async def recognize_if_music():
             wav_path = f.name
 
          try:
+            kpis[SHAZAM_CALLS_IDX] += 1
+
+
+
             result = await shazam.recognize(wav_path)
             if result.get("track"):
+               kpis[SHAZAM_HITS_IDX] += 1
                title = result["track"]["title"]
                artist = result["track"]["subtitle"]
                
