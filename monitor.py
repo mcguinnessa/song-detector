@@ -32,7 +32,8 @@ WINDOW_SECONDS = 1  # How often to check audio level
 #WINDOW_SECONDS = 1  # How often to check audio level
 MIN_CONSECUTIVE_WINDOWS = 3  # Require sustained volume
 NOT_FOUND_BACKOFF_SECONDS = 30  # How often to check audio level
-FOUND_BACKOFF_SECONDS = 30  # How often to check audio level
+FOUND_BACKOFF_SECONDS_1 = 120  # How often to check audio level
+FOUND_BACKOFF_SECONDS_2 = 30  # How often to check audio level
 
 THRESHOLD_ZCR = 0.10
 #THRESHOLD_ZCR = 0.18
@@ -54,6 +55,8 @@ audio_buffer = np.zeros(int(SAMPLE_RATE * DURATION), dtype='int16')
 volume_history = []
 raw_volume_history = []
 
+last_song_id = 0
+
 ###################################################################
 # Root Mean Squares Decibels Relative to Full Scale
 # 0 is the max possible, anything quieter is -ve
@@ -68,7 +71,9 @@ def rms_dbfs(signal):
 
    #To avoid log(0), -100 is basically silence
    if rms == 0:
-      return -100
+#     return -100, 0
+     print("RMS:",rms)
+     return -100, 0
 
    #32768 is the maximum possible amplitude for a 16-bit signed audio sample.
    #Normalized the range to 0.0.to 1.0 by dividing by max
@@ -150,7 +155,7 @@ def classify_buffer(buffer, sr):
 ###################################################################
 async def recognize_if_music():
    global kpis
-
+   global last_song_id 
 
    shazam = Shazam()
    while True:
@@ -209,24 +214,35 @@ async def recognize_if_music():
 
          try:
             kpis[SHAZAM_CALLS_IDX] += 1
-
-
-
             result = await shazam.recognize(wav_path)
             if result.get("track"):
+               #print("ALL:", result)
                kpis[SHAZAM_HITS_IDX] += 1
                title = result["track"]["title"]
                artist = result["track"]["subtitle"]
+               key = result["track"]["key"]
                
-               display_str = f"🎵 {title} by {artist}"
+               display_str = f"🎵 {title} by {artist} - [{key}]"
                #print(f"🎵 {title} by {artist}")
                print(display_str)
                display_song(title, artist)
-               await asyncio.sleep(FOUND_BACKOFF_SECONDS)  # Cooldown
+
+               same_song = False
+               if last_song_id == key:
+                  same_song = True
+
+               last_song_id = key
+
+               if same_song:
+                  print("Still the same song")
+                  await asyncio.sleep(FOUND_BACKOFF_SECONDS_2)  # Cooldown
+               else:
+                  await asyncio.sleep(FOUND_BACKOFF_SECONDS_1)  # Cooldown
             else:
                """Couldn't find anything"""
+               print("Cound not identify song")
+               #display_song("?", "?")
                await asyncio.sleep(NOT_FOUND_BACKOFF_SECONDS)
-               display_song("", "")
 
 #            else:
 #               print("🤷 No match found.")
@@ -236,6 +252,7 @@ async def recognize_if_music():
          volume_history.clear()
 #         await asyncio.sleep(DURATION + NOT_FOUND_BACKOFF_SECONDS)  # Cooldown
       else:
+         last_song_id = 0
          display_song("", "")
          await asyncio.sleep(WINDOW_SECONDS)
 
