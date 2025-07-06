@@ -24,6 +24,7 @@ font = ImageFont.load_default()
 
 clf = joblib.load("model.pkl")
 
+REPORT_FILE = "output.txt"
 SAMPLE_RATE = 44100
 CHANNELS = 1
 #THRESHOLD_DB = -25  # in dBFS, typical music is around -20 to -10 dBFS
@@ -134,9 +135,17 @@ def save_buffer_to_wav(buffer, sample_rate):
 ###################################################################
 # Print KPIs
 ###################################################################
-def print_kpis():
+def print_kpis(report):
    global kpis
-   print("All Calls:" + str(kpis[ALL_AUDIO_IDX]) + " Music:" + str(kpis[AUDIO_MUSIC_IDX]) + " Shazam Call:" + str(kpis[SHAZAM_CALLS_IDX]) + " Sz Found:" + str(kpis[SHAZAM_HITS_IDX]) )
+
+   kpi_str = f"""All Calls:{kpis[ALL_AUDIO_IDX]} Music:{kpis[AUDIO_MUSIC_IDX]} Shazam Call:{kpis[SHAZAM_CALLS_IDX]} Sz Found:{kpis[SHAZAM_HITS_IDX]}"""
+   print(kpi_str)
+   #print("All Calls:" + str(kpis[ALL_AUDIO_IDX]) + " Music:" + str(kpis[AUDIO_MUSIC_IDX]) + " Shazam Call:" + str(kpis[SHAZAM_CALLS_IDX]) + " Sz Found:" + str(kpis[SHAZAM_HITS_IDX]) )
+   #print(report)
+
+   with open(REPORT_FILE, "w") as file:
+      file.write(report)
+      file.write(kpi_str)
 
 ###################################################################
 # Classifies the buffer with ML
@@ -156,12 +165,14 @@ def classify_buffer(buffer, sr):
 async def recognize_if_music():
    global kpis
    global last_song_id 
+   time_to_sleep = WINDOW_SECONDS
 
    shazam = Shazam()
    while True:
 #      print("B:KPI kpis[ALL_AUDIO_IDX]:",kpis[ALL_AUDIO_IDX])
       kpis[ALL_AUDIO_IDX] += 1
 #      print("A:KPI kpis[ALL_AUDIO_IDX]:",kpis[ALL_AUDIO_IDX])
+      report = ""
 
       if not volume_history:
          await asyncio.sleep(WINDOW_SECONDS)
@@ -200,10 +211,11 @@ async def recognize_if_music():
       if is_loud and is_stable and right_complexity and is_classified_music:
          kpis[AUDIO_MUSIC_IDX] += 1
          is_music = True
+
+      report += f"""⏳Avg Raw: {avg_raw_volume:.1f} Avg: {avg_volume:.1f} dBFS | Std: {volume_std:.2f} | 📈 ZCR: {zcr:.4f} | 🎛️   Classified:{label}:({conf:.2f}) → {'🎶 Triggering' if is_loud and is_stable and right_complexity and is_classified_music else neg_str}\n""" 
  
-      print(f"⏳Avg Raw: {avg_raw_volume:.1f} Avg: {avg_volume:.1f} dBFS | Std: {volume_std:.2f} | 📈 ZCR: {zcr:.4f} | 🎛️  Classified:{label}:({conf:.2f}) → "
-          f"{'🎶 Triggering' if is_loud and is_stable and right_complexity and is_classified_music else neg_str}")
-      print_kpis()
+#      print(f"⏳Avg Raw: {avg_raw_volume:.1f} Avg: {avg_volume:.1f} dBFS | Std: {volume_std:.2f} | 📈 ZCR: {zcr:.4f} | 🎛️  Classified:{label}:({conf:.2f}) → "
+#          f"{'🎶 Triggering' if is_loud and is_stable and right_complexity and is_classified_music else neg_str}")
 
       if is_music:
          # Save to wav
@@ -224,7 +236,9 @@ async def recognize_if_music():
                
                display_str = f"🎵 {title} by {artist} - [{key}]"
                #print(f"🎵 {title} by {artist}")
-               print(display_str)
+#               print(display_str)
+               report += display_str
+               report += "\n"
                display_song(title, artist)
 
                same_song = False
@@ -234,15 +248,20 @@ async def recognize_if_music():
                last_song_id = key
 
                if same_song:
-                  print("Still the same song")
-                  await asyncio.sleep(FOUND_BACKOFF_SECONDS_2)  # Cooldown
+#                  print("Still the same song")
+                  report += "Still the same song\n"
+                  #await asyncio.sleep(FOUND_BACKOFF_SECONDS_2)  # Cooldown
+                  time_to_sleep = FOUND_BACKOFF_SECONDS_2
                else:
-                  await asyncio.sleep(FOUND_BACKOFF_SECONDS_1)  # Cooldown
+                  #await asyncio.sleep(FOUND_BACKOFF_SECONDS_1)  # Cooldown
+                  time_to_sleep = FOUND_BACKOFF_SECONDS_1
             else:
                """Couldn't find anything"""
-               print("Cound not identify song")
+#               print("Cound not identify song")
+               report += "Cound not identify song\n"
                #display_song("?", "?")
-               await asyncio.sleep(NOT_FOUND_BACKOFF_SECONDS)
+               #await asyncio.sleep(NOT_FOUND_BACKOFF_SECONDS)
+               time_to_sleep = NOT_FOUND_BACKOFF_SECONDS
 
 #            else:
 #               print("🤷 No match found.")
@@ -254,8 +273,13 @@ async def recognize_if_music():
       else:
          last_song_id = 0
          display_song("", "")
-         await asyncio.sleep(WINDOW_SECONDS)
+         #await asyncio.sleep(WINDOW_SECONDS)
+         time_to_sleep = WINDOW_SECONDS
 
+
+      print(report)
+      print_kpis(report)
+      await asyncio.sleep(time_to_sleep)
 
 ###################################################################
 # Displays the song and artist

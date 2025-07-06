@@ -13,7 +13,7 @@ def extract_features(folder):
    #hop_length = int(1.0 * SAMPLE_RATE)
 
     X, y = [], []
-    for label in ["music","speech"]:
+    for label in ["music","not-music"]:
         path = f"data/{label}"
         for fn in os.listdir(path):
             if label not in count.keys():
